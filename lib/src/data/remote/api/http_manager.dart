@@ -1,0 +1,324 @@
+﻿import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_svprogresshud/flutter_svprogresshud.dart';
+import 'package:your_app_name/src/data/remote/api/api.dart';
+import 'package:your_app_name/src/data/remote/api/pretty_logger.dart';
+import 'package:your_app_name/src/presentation/cubit/app_bloc.dart';
+import 'package:your_app_name/src/utils/configs/application.dart';
+import 'package:your_app_name/src/utils/configs/preferences.dart';
+import 'package:your_app_name/src/utils/logger.dart';
+import 'package:your_app_name/src/utils/logging/loggy_exp.dart';
+import 'package:your_app_name/src/utils/user_data_util.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+import '../../../services/remot_config_service.dart';
+
+class HTTPManager {
+  final exceptionCode = ['jwt_auth_bad_iss', 'jwt_auth_invalid_token'];
+  late final Dio _dio;
+  late String _baseUrl;
+
+  HTTPManager({bool forum = false}) {
+    final config = RemoteConfigService();
+    _baseUrl = config.getBaseUrl(forum: forum);
+
+    ///we are using above url for testing purpose
+    // ? 'https://your-api-domain.com/api/v2/'
+    // : 'https://your-api-domain.com/forumapi/';
+    // ? 'https://your-staging-api-domain.com/api/'
+    // : 'https://your-staging-api-domain.com/forumapi/';
+
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: _baseUrl,
+        connectTimeout: const Duration(milliseconds: 30000),
+        receiveTimeout: const Duration(milliseconds: 30000),
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.json,
+      ),
+    );
+
+    _dio.interceptors.add(
+      InterceptorsWrapper(onRequest: (options, handler) async {
+        final prefs = await Preferences.openBox();
+        Map<String, dynamic> headers = {
+          "Device-Id": Application.device?.uuid,
+          "osName": Application.device?.model,
+          "Device-Version": Application.device?.version,
+          "deviceType":
+              '${Application.device?.type} ${Application.device?.model}',
+          "Device-Token": Application.device?.token,
+          HttpHeaders.contentTypeHeader: 'application/json',
+        };
+
+        var token = prefs.getKeyValue(Preferences.token, '');
+        if (token != '') {
+          headers["Authorization"] = "Bearer $token";
+        }
+        options.headers.addAll(headers);
+        _printRequest(options);
+        return handler.next(options);
+      }, onResponse: (response, handler) {
+        handler.next(response);
+      }, onError: (error, handler) async {
+        if (error.response?.data['message'] ==
+            'Unauthorized! Token was expired!') {
+          final prefs = await Preferences.openBox();
+          var rToken = prefs.getKeyValue(Preferences.refreshToken, '');
+          final userId = prefs.getKeyValue(Preferences.userId, '');
+          final Map<String, dynamic> params = {
+            "refreshToken": rToken,
+          };
+          final response = await Api.requestRefreshToken(userId, params);
+          if (response.success!) {
+            final newToken = response.data['accessToken'];
+            prefs.setKeyValue(Preferences.token, newToken);
+            prefs.setKeyValue(
+                Preferences.refreshToken, response.data['refreshToken']);
+            error.requestOptions.headers['Authorization'] = 'Bearer $newToken';
+            try {
+              var response = await _dio.request(
+                error.requestOptions.path,
+                options: Options(
+                  method: error.requestOptions.method,
+                  headers: error.requestOptions.headers,
+                  receiveTimeout: error.requestOptions.receiveTimeout,
+                ),
+              );
+              handler.resolve(response);
+            } catch (e, stackTrace) {
+              logError('Refresh Token Response Failed', e);
+              await Sentry.captureException(e, stackTrace: stackTrace);
+              handler.reject(error);
+            }
+          } else if (response.message ==
+              'Unauthorized! Refresh Token was expired!') {
+            logError('Refresh Token Error', response.message);
+            AppBloc.loginCubit.onLogout();
+            UserDataUtil.cleanUserData();
+            handler.next(error);
+          }
+        } else {
+          final response = Response(
+            requestOptions: error.requestOptions,
+            data: error.response?.data,
+          );
+          return handler.resolve(response);
+        }
+      }),
+    );
+
+    _dio.interceptors.add(PrettyDioLogger());
+  }
+
+  Future<dynamic> post({
+    required String url,
+    dynamic data,
+    FormData? formData,
+    Options? options,
+    Function(num)? progress,
+    bool? loading,
+  }) async {
+    if (loading == true) {
+      SVProgressHUD.setDefaultStyle(SVProgressHUDStyle.light);
+      SVProgressHUD.show();
+    }
+    try {
+      final response = await _dio.post(
+        url,
+        data: data ?? formData,
+        options: options,
+        onSendProgress: (received, total) {
+          if (progress != null) {
+            progress((received / total) / 0.01);
+          }
+        },
+      );
+      return response.data;
+    } on DioException catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      return _errorHandle(error);
+    } finally {
+      if (loading == true) {
+        SVProgressHUD.dismiss();
+      }
+    }
+  }
+
+  Future<dynamic> delete({
+    required String url,
+    dynamic data,
+    FormData? formData,
+    Options? options,
+    CancelToken? cancelToken,
+    bool? loading,
+  }) async {
+    if (loading == true) {
+      SVProgressHUD.setDefaultStyle(SVProgressHUDStyle.light);
+      SVProgressHUD.show();
+    }
+    try {
+      final response = await _dio.delete(
+        url,
+        data: data ?? formData,
+        options: options,
+        cancelToken: cancelToken,
+      );
+      return response.data;
+    } on DioException catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      return _errorHandle(error);
+    } finally {
+      if (loading == true) {
+        SVProgressHUD.dismiss();
+      }
+    }
+  }
+
+  Future<dynamic> patch({
+    required String url,
+    dynamic data,
+    FormData? formData,
+    Options? options,
+    Function(num)? progress,
+    bool? loading,
+  }) async {
+    if (loading == true) {
+      SVProgressHUD.setDefaultStyle(SVProgressHUDStyle.light);
+      SVProgressHUD.show();
+    }
+    try {
+      final response = await _dio.patch(
+        url,
+        data: data ?? formData,
+        options: options,
+        onSendProgress: (received, total) {
+          if (progress != null) {
+            progress((received / total) / 0.01);
+          }
+        },
+      );
+      return response.data;
+    } on DioException catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      return _errorHandle(error);
+    } finally {
+      if (loading == true) {
+        SVProgressHUD.dismiss();
+      }
+    }
+  }
+
+  Future<dynamic> get({
+    required String url,
+    dynamic params,
+    Options? options,
+    bool? loading,
+  }) async {
+    try {
+      if (loading == true) {
+        SVProgressHUD.setDefaultStyle(SVProgressHUDStyle.light);
+        SVProgressHUD.show();
+      }
+      final response = await _dio.get(
+        url,
+        queryParameters: params,
+        options: options,
+      );
+      return response.data;
+    } on DioException catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      return _errorHandle(error);
+    } finally {
+      if (loading == true) {
+        SVProgressHUD.dismiss();
+      }
+    }
+  }
+
+  Future<dynamic> download({
+    required String url,
+    required String filePath,
+    dynamic params,
+    Options? options,
+    Function(num)? progress,
+    bool? loading,
+  }) async {
+    if (loading == true) {
+      SVProgressHUD.setDefaultStyle(SVProgressHUDStyle.light);
+      SVProgressHUD.show();
+    }
+    try {
+      final response = await _dio.download(
+        url,
+        filePath,
+        options: options,
+        queryParameters: params,
+        onReceiveProgress: (received, total) {
+          if (progress != null) {
+            progress((received / total) / 0.01);
+          }
+        },
+      );
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "data": File(filePath),
+          "message": 'download_success',
+        };
+      }
+      return {
+        "success": false,
+        "message": 'download_fail',
+      };
+    } on DioException catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      return _errorHandle(error);
+    } finally {
+      if (loading == true) {
+        SVProgressHUD.dismiss();
+      }
+    }
+  }
+
+  void _printRequest(RequestOptions options) {
+    UtilLogger.log("BEFORE REQUEST ====================================");
+    UtilLogger.log("${options.method} URL", options.uri);
+    UtilLogger.log("HEADERS", options.headers);
+    if (options.method == 'GET') {
+      UtilLogger.log("PARAMS", options.queryParameters);
+    } else {
+      UtilLogger.log("DATA", options.data);
+    }
+  }
+
+  ///Error common handle
+  Map<String, dynamic> _errorHandle(DioException error) {
+    String message = "unknown_error";
+    Map<String, dynamic> data = {};
+
+    switch (error.type) {
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        message = "request_time_out";
+        break;
+
+      default:
+        if (error.response?.data['message'] ==
+            'Unauthorized! Refresh Token was expired!') {
+          AppBloc.loginCubit.onLogout();
+          message = "Your session has expired. Please log in again.";
+        } else {
+          message = "Please make sure you are connected to the Internet";
+        }
+        break;
+    }
+
+    return {
+      "success": false,
+      "message": message,
+      "data": data,
+    };
+  }
+}

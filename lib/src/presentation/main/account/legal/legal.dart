@@ -1,0 +1,101 @@
+﻿import 'package:flutter/material.dart';
+import 'package:your_app_name/src/presentation/widget/app_list_title.dart';
+import 'package:your_app_name/src/utils/configs/language.dart';
+import 'package:your_app_name/src/utils/translate.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class LegalScreen extends StatefulWidget {
+  const LegalScreen({super.key});
+
+  @override
+  State<LegalScreen> createState() => _LegalScreenState();
+}
+
+class _LegalScreenState extends State<LegalScreen> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  Future<void> _makeAction(String link) async {
+    await launchUrl(
+      Uri.parse(link),
+      mode: LaunchMode.inAppWebView,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          Translate.of(context).translate('legal'),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: <Widget>[
+            AppListTitle(
+              title: Translate.of(context).translate('imprint'),
+              onPressed: () {
+                _makeAction('https://your-app-domain.com/ImprintPage');
+              },
+              trailing: Row(
+                children: <Widget>[
+                  RotatedBox(
+                    quarterTurns: AppLanguage.isRTL() ? 2 : 0,
+                    child: const Icon(
+                      Icons.keyboard_arrow_right,
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AppListTitle(
+              title: Translate.of(context).translate('privacy_policy'),
+              onPressed: () {
+                _makeAction('https://your-app-domain.com/PrivacyPolicy');
+              },
+              trailing: Row(
+                children: <Widget>[
+                  RotatedBox(
+                    quarterTurns: AppLanguage.isRTL() ? 2 : 0,
+                    child: const Icon(
+                      Icons.keyboard_arrow_right,
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AppListTitle(
+              title: Translate.of(context).translate('terms_of_use'),
+              onPressed: () {
+                _makeAction('https://your-app-domain.com/TermsOfUse');
+              },
+              trailing: Row(
+                children: <Widget>[
+                  RotatedBox(
+                    quarterTurns: AppLanguage.isRTL() ? 2 : 0,
+                    child: const Icon(
+                      Icons.keyboard_arrow_right,
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

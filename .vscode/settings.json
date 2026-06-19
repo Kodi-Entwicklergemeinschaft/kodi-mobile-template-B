@@ -1,0 +1,5 @@
+{
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "cmake.sourceDirectory": "/path/to/your/project/linux",
+  "dart.flutterSdkPath": ".fvm/versions/3.32.0"
+}

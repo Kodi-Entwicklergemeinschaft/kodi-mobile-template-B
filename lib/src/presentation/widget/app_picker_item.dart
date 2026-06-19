@@ -1,0 +1,112 @@
+// ignore_for_file: use_super_parameters
+
+import 'package:flutter/material.dart';
+
+class AppPickerItem extends StatelessWidget {
+  final String title;
+  final String? value;
+  final Widget? leading;
+  final bool loading;
+  final VoidCallback? onPressed;
+  final bool? isEnabled;
+
+  const AppPickerItem({
+    Key? key,
+    required this.title,
+    this.value,
+    this.leading,
+    this.loading = false,
+    required this.onPressed,
+    this.isEnabled
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget labelWidget = Container();
+    Widget valueWidget = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context)
+            .textTheme
+            .titleMedium!.copyWith(
+            color: (isEnabled != null && !isEnabled!)
+                ? Theme.of(context).hintColor.withOpacity(0.3)
+                : Theme.of(context).hintColor),
+      ),
+    );
+
+    if (value != null && value!.isNotEmpty) {
+      labelWidget = Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+      valueWidget = Text(
+        value!,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium,
+      );
+    }
+
+    Widget trailingWidget = const Icon(Icons.arrow_drop_down);
+    if (loading) {
+      trailingWidget = const Padding(
+        padding: EdgeInsets.all(4),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator.adaptive(
+            strokeWidth: 1.5,
+          ),
+        ),
+      );
+    }
+
+    Widget leadingWidget = const SizedBox(width: 16);
+    if (leading != null) {
+      leadingWidget = Row(
+        children: [
+          const SizedBox(width: 8),
+          leading!,
+          const SizedBox(width: 8),
+        ],
+      );
+    }
+
+    return InkWell(
+      onTap: loading ? null : onPressed,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: (isEnabled != null && !isEnabled!)
+              ? Theme.of(context).dividerColor.withOpacity(.03)
+              : Theme.of(context).dividerColor.withOpacity(.07),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            leadingWidget,
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  labelWidget,
+                  valueWidget,
+                ],
+              ),
+            ),
+            trailingWidget,
+            const SizedBox(width: 12)
+          ],
+        ),
+      ),
+    );
+  }
+}
